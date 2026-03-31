@@ -1991,8 +1991,8 @@ Try each of these to understand what Bits can do:
 **Week 2:** Run your first proactive review ("How are our SLOs looking this week?")
 
 **Resources:**
-- bits.md Reference Guide: [Bits Library → Setup Guides]
-- Monitor Template for Bits Integration: [Bits Library → Monitor Templates]
+- bits.md Reference Guide: [Bits Community → Setup Guides]
+- Monitor Template for Bits Integration: [Bits Community → Monitor Templates]
 - Team Setup Guide: [Optimizing Service Dependencies for Bits]
 `,
   },

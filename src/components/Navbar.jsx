@@ -29,13 +29,8 @@ export default function Navbar({ currentPage, navigate }) {
             onClick={() => navigate({ page: 'home' })}
             className="flex items-center gap-2.5 group"
           >
-            <img
-              src="/logo.png"
-              alt="Bits Library"
-              className="h-7 w-auto object-contain"
-            />
             <span className="font-bold text-white text-[15px] tracking-tight">
-              Bits Library
+              Bits Community
             </span>
             <span className="hidden sm:inline text-[11px] font-medium text-[#65637A] uppercase tracking-widest ml-0.5">
               beta

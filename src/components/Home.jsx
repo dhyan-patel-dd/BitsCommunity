@@ -49,7 +49,7 @@ export default function Home({ navigate }) {
               className="text-transparent bg-clip-text"
               style={{ backgroundImage: 'linear-gradient(135deg, #9B6DC5 0%, #C084FC 50%, #E879F9 100%)' }}
             >
-              Library
+              Community
             </span>
           </h1>
 
@@ -203,9 +203,8 @@ export default function Home({ navigate }) {
       <footer className="border-t border-white/[0.05] py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="Bits Library" className="h-5 w-auto object-contain" />
             <span className="text-[#65637A] text-sm">
-              Bits Library — Community hub for{' '}
+              Bits Community — Community hub for{' '}
               <a href="https://docs.datadoghq.com/bits_ai/" className="text-[#9B6DC5] hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">
                 Datadog Bits AI SRE
               </a>

@@ -733,7 +733,7 @@ function SuccessState({ form, navigate }) {
         <div className="space-y-3">
           {[
             { icon: Shield, label: 'Datadog reviews your submission', sub: 'Usually within 2–3 business days' },
-            { icon: Sparkles, label: 'If approved, it goes live in Bits Library', sub: 'Attributed per your preference' },
+            { icon: Sparkles, label: 'If approved, it goes live in Bits Community', sub: 'Attributed per your preference' },
             { icon: ArrowRight, label: 'The community can upvote, star, and comment', sub: 'You can see feedback in your contributor profile' },
           ].map(({ icon: Icon, label, sub }) => (
             <div key={label} className="flex items-start gap-3">
