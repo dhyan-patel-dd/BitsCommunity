@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Search, ArrowRight, TrendingUp, Star, Sparkles, ChevronRight, Shield, FileCode, Activity, BookOpen, MessageSquare, Compass, Lightbulb } from 'lucide-react'
+import { Search, ArrowRight, TrendingUp, Star, Sparkles, ChevronRight, Shield, FileCode, Activity, BookOpen, MessageSquare, Compass, Lightbulb, Zap, Clock, AlertTriangle } from 'lucide-react'
 import { templates, contentTypes, contentTypeIcons, contentTypeDescriptions } from '../data/templates.js'
+import { investigations, categoryColors, categoryIcons } from '../data/investigations.js'
 import ContentCard from './ContentCard.jsx'
 import Badge from './Badge.jsx'
 
@@ -168,6 +169,46 @@ export default function Home({ navigate }) {
             {trendingTemplates.map(t => (
               <ContentCard key={t.id} template={t} navigate={navigate} />
             ))}
+          </div>
+        </section>
+
+        {/* ── Investigation Library teaser ──────────────────── */}
+        <section>
+          <SectionHeader
+            eyebrow="Investigation Library"
+            eyebrowIcon={<Zap size={12} className="text-[#F59E0B]" />}
+            eyebrowColor="text-[#F59E0B]"
+            title="See Bits in Action"
+            subtitle="Real investigations that solved real incidents. Learn how Bits surfaces root causes."
+            action="View all investigations"
+            onAction={() => navigate({ page: 'library' })}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {investigations.filter(i => i.featured).slice(0, 3).map(inv => {
+              const colors = categoryColors[inv.category] || categoryColors['Incident Response']
+              return (
+                <button
+                  key={inv.id}
+                  onClick={() => navigate({ page: 'investigation', investigationId: inv.id })}
+                  className="group text-left rounded-xl border border-white/[0.07] bg-[#18162A] hover:border-[#774AA4]/40 hover:bg-[#1F1C33] transition-all duration-200 overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(10,8,18,0.8)]"
+                >
+                  <div className="h-0.5 bg-gradient-to-r from-[#774AA4] to-[#E879F9] opacity-50 group-hover:opacity-100 transition-opacity" />
+                  <div className="p-4">
+                    <div className="mb-2.5">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${colors.bg} ${colors.text} ${colors.border} border`}>
+                        {categoryIcons[inv.category]} {inv.category}
+                      </span>
+                    </div>
+                    <h3 className="font-semibold text-white text-sm leading-snug line-clamp-2 mb-1.5">{inv.title}</h3>
+                    <p className="text-[#A0A0B8] text-xs line-clamp-2 leading-relaxed mb-3">{inv.summary}</p>
+                    <div className="flex items-center gap-3 text-[11px] text-[#65637A]">
+                      <span className="flex items-center gap-1"><Clock size={10} /> {inv.timeToResolution}</span>
+                      <span className="flex items-center gap-1"><AlertTriangle size={10} /> {inv.monitorType}</span>
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </section>
 

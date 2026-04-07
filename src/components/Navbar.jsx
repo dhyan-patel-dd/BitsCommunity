@@ -45,6 +45,9 @@ export default function Navbar({ currentPage, navigate }) {
             <NavLink active={currentPage === 'browse'} onClick={() => navigate({ page: 'browse' })}>
               Browse
             </NavLink>
+            <NavLink active={currentPage === 'library' || currentPage === 'investigation'} onClick={() => navigate({ page: 'library' })}>
+              Library
+            </NavLink>
           </div>
 
           {/* Right actions */}

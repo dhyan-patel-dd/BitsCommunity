@@ -4,12 +4,15 @@ import Home from './components/Home.jsx'
 import Browse from './components/Browse.jsx'
 import TemplateDetail from './components/TemplateDetail.jsx'
 import Submit from './components/Submit.jsx'
+import Library from './components/Library.jsx'
+import InvestigationDetail from './components/InvestigationDetail.jsx'
 
 /**
  * Navigation state shape:
  * {
- *   page: 'home' | 'browse' | 'detail',
+ *   page: 'home' | 'browse' | 'detail' | 'library' | 'investigation',
  *   templateId: string | null,
+ *   investigationId: string | null,
  *   // Browse page initial state
  *   query: string,
  *   contentType: string | null,
@@ -20,6 +23,7 @@ import Submit from './components/Submit.jsx'
 const defaultNav = {
   page: 'home',
   templateId: null,
+  investigationId: null,
   query: '',
   contentType: null,
   verified: false,
@@ -62,6 +66,17 @@ export default function App() {
 
       {nav.page === 'submit' && (
         <Submit navigate={navigate} />
+      )}
+
+      {nav.page === 'library' && (
+        <Library navigate={navigate} />
+      )}
+
+      {nav.page === 'investigation' && (
+        <InvestigationDetail
+          investigationId={nav.investigationId}
+          navigate={navigate}
+        />
       )}
     </div>
   )
