@@ -65,7 +65,7 @@ export default function Library({ navigate }) {
         {/* ── Search + Filters ────────────────────────────── */}
         <div className="mb-8 space-y-4">
           {/* Search */}
-          <div className="relative max-w-xl">
+          <div className="relative max-w-xl mx-auto">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#65637A]" />
             <input
               type="text"
@@ -77,7 +77,7 @@ export default function Library({ navigate }) {
           </div>
 
           {/* Category tabs */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center justify-center gap-2 flex-wrap">
             <CategoryTab
               active={activeCategory === 'All'}
               onClick={() => setActiveCategory('All')}
@@ -157,12 +157,12 @@ function InvestigationCard({ investigation: inv, navigate }) {
   return (
     <button
       onClick={() => navigate({ page: 'investigation', investigationId: inv.id })}
-      className="group w-full text-left rounded-xl border border-white/[0.07] bg-[#18162A] hover:border-[#774AA4]/40 hover:bg-[#1F1C33] transition-all duration-200 shadow-card hover:shadow-cardHover hover:-translate-y-0.5 overflow-hidden"
+      className="group w-full h-full text-left rounded-xl border border-white/[0.07] bg-[#18162A] hover:border-[#774AA4]/40 hover:bg-[#1F1C33] transition-all duration-200 shadow-card hover:shadow-cardHover hover:-translate-y-0.5 overflow-hidden flex flex-col"
     >
-      {/* Top accent bar */}
-      <div className="h-0.5 bg-gradient-to-r from-[#774AA4] via-[#A855F7] to-[#E879F9] opacity-50 group-hover:opacity-100 transition-opacity" />
+      {/* Top accent bar — always at the very top */}
+      <div className="h-0.5 w-full bg-gradient-to-r from-[#774AA4] via-[#A855F7] to-[#E879F9] opacity-50 group-hover:opacity-100 transition-opacity flex-shrink-0" />
 
-      <div className="p-5">
+      <div className="p-5 flex flex-col flex-1">
         {/* Category */}
         <div className="mb-3">
           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium ${colors.bg} ${colors.text} ${colors.border} border`}>
@@ -189,8 +189,8 @@ function InvestigationCard({ investigation: inv, navigate }) {
           ))}
         </div>
 
-        {/* Footer: metadata + CTA */}
-        <div className="pt-3 border-t border-white/[0.05] flex items-center justify-between">
+        {/* Footer: metadata + CTA — pushed to bottom */}
+        <div className="pt-3 border-t border-white/[0.05] flex items-center justify-between mt-auto">
           <div className="flex items-center gap-4 text-[11px] text-[#65637A]">
             <span className="flex items-center gap-1">
               <Clock size={11} />

@@ -1,300 +1,462 @@
 /**
  * Curated investigation examples for the Library section.
  * Each entry showcases a real-world scenario where Bits AI SRE
- * helped solve a complex problem, with a detailed writeup.
+ * investigated a complex problem triggered by a monitor alert.
+ *
+ * Structure per writeup:
+ *   The Problem — what happened and why it's hard for SREs
+ *   What Bits Did — the autonomous investigation steps
+ *   What Bits Delivered — specific findings, evidence, root cause
+ *   The Value — time saved, blast radius clarity, what would have happened without Bits
  */
 
 export const investigationCategories = [
-  'Incident Response',
-  'Performance Degradation',
   'Deployment Failure',
+  'Error Rate Spike',
+  'Latency Degradation',
   'Infrastructure',
   'Database',
-  'Networking',
+  'Resource Exhaustion',
 ]
 
 export const categoryColors = {
-  'Incident Response':      { bg: 'bg-red-500/12',    text: 'text-red-400',    border: 'border-red-500/25' },
-  'Performance Degradation': { bg: 'bg-orange-500/12', text: 'text-orange-400', border: 'border-orange-500/25' },
   'Deployment Failure':      { bg: 'bg-yellow-500/12', text: 'text-yellow-400', border: 'border-yellow-500/25' },
+  'Error Rate Spike':        { bg: 'bg-red-500/12',    text: 'text-red-400',    border: 'border-red-500/25' },
+  'Latency Degradation':     { bg: 'bg-orange-500/12', text: 'text-orange-400', border: 'border-orange-500/25' },
   'Infrastructure':          { bg: 'bg-blue-500/12',   text: 'text-blue-400',   border: 'border-blue-500/25' },
   'Database':                { bg: 'bg-emerald-500/12',text: 'text-emerald-400',border: 'border-emerald-500/25' },
-  'Networking':              { bg: 'bg-purple-500/12', text: 'text-purple-400', border: 'border-purple-500/25' },
+  'Resource Exhaustion':     { bg: 'bg-purple-500/12', text: 'text-purple-400', border: 'border-purple-500/25' },
 }
 
 export const categoryIcons = {
-  'Incident Response':       '🚨',
-  'Performance Degradation': '📉',
   'Deployment Failure':      '🚀',
+  'Error Rate Spike':        '🚨',
+  'Latency Degradation':     '📉',
   'Infrastructure':          '🏗️',
   'Database':                '🗄️',
-  'Networking':              '🌐',
+  'Resource Exhaustion':     '🔥',
 }
 
 export const investigations = [
   {
     id: 'inv-001',
-    title: 'Cascading Latency Spike Traced to Misconfigured Connection Pool',
-    summary: 'A 10x latency spike across three microservices was caused by a single service exhausting its database connection pool after a config change went unnoticed during deployment.',
-    category: 'Performance Degradation',
-    services: ['checkout-service', 'inventory-api', 'postgres-primary'],
+    title: 'Off-by-One Bug in Cart Pricing Crashes Checkout for Flagged Users',
+    summary: 'A deploy introduced a subtle array bounds bug that only crashed when a specific feature flag was enabled. Bits traced 70,809 RUM errors to the exact line of code, the deploy that introduced it, and the feature flag that activated it — before the on-call had finished reading the alert.',
+    category: 'Deployment Failure',
+    services: ['shopist-web-ui', 'shopist-cart-service'],
     timeToResolution: '7 min',
-    monitorType: 'APM',
-    tags: ['latency', 'connection-pool', 'cascading-failure', 'microservices'],
+    monitorType: 'RUM',
+    tags: ['javascript', 'feature-flag', 'off-by-one', 'rum', 'cart-abandonment'],
     featured: true,
-    writeup: `## The Alert
+    writeup: `## The Problem
 
-An alert fired at 2:47 AM: \`checkout-service p99 latency > 5s\`. Within minutes, downstream alerts triggered for \`inventory-api\` and the Postgres primary.
+A RUM error rate monitor fires: error count on the cart page has spiked 200x. The on-call sees thousands of \`TypeError\` events but the stack traces point to minified production code. There's no obvious recent deploy — the last one was 8 hours ago and seemed fine. The errors only affect some users, not all, making it unclear whether this is a code bug, a browser compatibility issue, or a third-party script failure.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits immediately correlated the three firing monitors and identified a shared dependency: all impacted services routed through \`checkout-service\` for inventory checks. Bits traced the root cause to a **connection pool misconfiguration** deployed 4 hours earlier.
+Feature-flag-gated bugs are some of the hardest to triage manually. The deploy "passed" — health checks were green, error rates didn't spike at deploy time because the flag wasn't enabled yet. When the flag was later ramped, the errors appear disconnected from any deployment event. An SRE would need to: check RUM error groupings, identify which users are affected, cross-reference feature flag state, find the relevant deploy, read the diff, and locate the bug — all while the incident is ongoing. This typically takes 30-60 minutes.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **APM trace analysis** — Bits identified that 94% of slow traces had a common span: \`pg.query\` on \`checkout-service\`, with wait times averaging 4.2s (up from 12ms baseline).
-2. **Recent deployment diff** — Bits flagged a config change in the 6:43 PM deploy: \`max_pool_size\` was reduced from 50 to 5 in the connection pool config, buried in a YAML file that also contained unrelated feature flag changes.
-3. **Resource correlation** — Postgres \`active_connections\` metric showed the pool was fully saturated, with 100+ queued requests backing up.
+Bits was triggered by the RUM error rate monitor and autonomously:
 
-## The Fix
+1. **Grouped the RUM errors** by error message and identified the dominant error: \`TypeError: can't access property "id", s is undefined\` — accounting for 94% of all errors in the window
+2. **Correlated with feature flags** by analyzing RUM session attributes, finding that 100% of affected sessions had \`new-checkout-flow: true\`
+3. **Traced to the deployment** by matching the feature flag to the code path introduced in \`shopist-web-ui\` version \`6.4.7-rc\` (deployed 8 hours prior at 08:00 UTC, commit \`95c127f\`)
+4. **Identified the exact bug** by inspecting the source: \`cart.vue\` line 564 uses \`i <= items.length\` instead of \`i < items.length\` in \`reconcileCartPricing()\`, causing an array-out-of-bounds access on every cart page load for flagged users
+5. **Mapped the full blast radius** including secondary errors from the same flag path in \`placeOrder()\` that injected synthetic checkout failures for specific email domains
 
-The on-call engineer reverted \`max_pool_size\` to 50. Latency returned to baseline within 3 minutes of the config rollback.
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-Without Bits, the on-call would have started with the Postgres alerts (the loudest signal) and likely investigated database-level issues first — slow queries, lock contention, disk I/O. The actual root cause (a config value change in a different service's deployment) would have taken significantly longer to surface manually.
+Off-by-one bug at \`cart.vue:564\` — \`i <= items.length\` should be \`i < items.length\`. Activated by the \`new-checkout-flow\` feature flag, introduced in commit \`95c127f\`.
 
-Bits' ability to correlate the **deployment timeline with APM traces and infrastructure metrics** simultaneously compressed what could have been a 1-2 hour investigation into minutes.`,
+### Evidence
+
+- **70,809** errors in the alert window, **53,401** RUM error events captured
+- 100% of errors correlated with \`new-checkout-flow: true\` flag state
+- Deploy \`6.4.7-rc\` at 08:00 UTC confirmed via change tracking
+- Secondary error injection in \`placeOrder()\` lines 328-336 compounding the cart abandonment
+
+### Impact Assessment
+
+454 failed checkout attempts in a 15-minute window. Cart abandonment rate spiked above anomaly bounds, concentrated in the United States region. Customer impact lasted approximately 21 minutes.
+
+## The Value
+
+**Without Bits**, the on-call would have started by investigating the RUM errors in isolation — trying to reproduce the TypeError, checking browser versions, reviewing the minified stack trace. The connection to the feature flag (enabled hours after deploy) would not have been obvious. The deploy itself appeared clean. Reaching the root cause manually would have required correlating RUM data → feature flag state → deploy timeline → source code, a process that typically takes 30-60 minutes.
+
+**Bits delivered the root cause, the exact line of code, and the full blast radius in 7 minutes** — before the on-call engineer had finished triaging the initial alert. The team disabled the feature flag and the errors stopped immediately.`,
   },
   {
     id: 'inv-002',
-    title: 'Memory Leak in Node.js Service Caught Before Customer Impact',
-    summary: 'Bits identified a gradual memory leak in a payment processing service by correlating anomaly detection with recent code changes, enabling a fix before any customer-facing errors occurred.',
-    category: 'Incident Response',
-    services: ['payment-processor', 'redis-cache'],
-    timeToResolution: '5 min',
-    monitorType: 'Anomaly',
-    tags: ['memory-leak', 'node.js', 'anomaly-detection', 'proactive'],
+    title: 'Envoy Sidecar OOMKills Create Intermittent Redis Failures Across Auth Fleet',
+    summary: 'A 40% spike in 5xx errors on the auth-service looked like a Redis connectivity issue. Bits traced it through APM spans to Envoy sidecar OOMKill events caused by a logging config change deployed 6 hours earlier — a connection no human would make quickly under pressure.',
+    category: 'Resource Exhaustion',
+    services: ['auth-service', 'redis-session-store', 'envoy-sidecar'],
+    timeToResolution: '6 min',
+    monitorType: 'APM',
+    tags: ['redis', 'envoy', 'oomkill', 'connection-pool', 'kubernetes'],
     featured: true,
-    writeup: `## The Alert
+    writeup: `## The Problem
 
-An anomaly monitor detected \`payment-processor\` memory usage trending 3 standard deviations above its weekly baseline. No customer-facing errors had occurred yet — the service was at 78% memory utilization and climbing.
+The auth-service error rate monitor fires: 5xx responses have jumped to 40%. The errors are intermittent — they spike for 8-12 seconds, recover, then spike again. APM traces show \`ECONNREFUSED\` on Redis commands. The Redis cluster itself looks healthy: no elevated latency, no connection limit issues, no memory pressure.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits analyzed the anomaly in context and identified a **memory leak introduced 2 days earlier** in a PR that modified the event listener cleanup logic.
+Intermittent errors that self-recover are notoriously difficult to debug. The SRE's first instinct is to investigate Redis (the service returning errors), but Redis is fine. The actual root cause is a sidecar proxy crash that happens at the network layer, invisible in application-level Redis metrics. The config change that caused it was deployed 6 hours ago to a completely different component (the Envoy proxy, not the application), and it didn't cause immediate issues — the memory leak was gradual. Connecting a "Redis connection refused" error to an "Envoy access logging config change" requires correlating across Kubernetes events, container metrics, config diffs, and APM traces simultaneously.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **Memory trend analysis** — Bits charted the memory growth pattern: a steady 2% per hour increase starting exactly at the timestamp of deploy \`v2.14.3\`, with no corresponding increase in request volume.
-2. **Code change correlation** — Bits flagged the deploy diff, specifically a change to \`EventEmitter\` listeners in the payment webhook handler. The new code attached listeners on each request but never called \`removeListener()\` on completion.
-3. **Garbage collection metrics** — GC pause times had increased 4x, confirming growing heap pressure. Bits surfaced the \`process.memoryUsage.heapUsed\` metric alongside the GC data.
-4. **Projected impact** — Based on the growth rate, Bits estimated OOM kill within ~11 hours, well before the next business day.
+Bits was triggered by the APM error rate monitor and autonomously:
 
-## The Fix
+1. **Analyzed failing APM traces** and identified that 100% of errors shared a common span: \`redis.command\` failing with \`ECONNREFUSED 127.0.0.1:6379\` — the connection was refused at the loopback address, indicating a local proxy issue, not a remote Redis issue
+2. **Checked Kubernetes events** for the auth-service pods and found 47 \`OOMKilled\` events on the \`envoy-sidecar\` container across 12 pods during the alert window
+3. **Correlated the OOMKill timing** with the error spikes — each 8-12 second error window aligned exactly with an Envoy restart cycle
+4. **Traced the memory increase** to a config change deployed 6 hours earlier that enabled \`access_log_format: FULL\`, increasing per-connection memory from ~2KB to ~18KB
+5. **Calculated the memory math**: 7,200 active connections × 18KB = ~126Mi, just under the 128Mi limit — any traffic burst pushed it over
 
-The team pushed a hotfix adding proper listener cleanup in the webhook handler. Memory usage stabilized within one GC cycle.
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-This was a **proactive catch** — no customers were affected. Traditional alerting would have fired only at 90% memory (the threshold alert), by which point the service would have been minutes from OOM. Bits' correlation of the anomaly with the specific code change gave the team both the "what" and the "why" in a single investigation, enabling a targeted fix instead of a broad rollback.`,
+Envoy sidecar \`access_log_format: FULL\` config change increased per-connection memory 9x. With ~7,200 active connections, total memory reached the 128Mi container limit, triggering OOMKill restarts that dropped all Redis connections routed through the sidecar.
+
+### Evidence
+
+- **47 OOMKill events** across 12 pods in the alert window
+- \`ECONNREFUSED\` at \`127.0.0.1:6379\` (loopback = sidecar, not Redis)
+- Config change deployed 6 hours prior: \`access_log_format: FULL\`
+- Memory math: 7,200 connections × 18KB = 126Mi (limit: 128Mi)
+- Mean time between OOMKill and recovery: **9.4 seconds**
+
+### Impact Assessment
+
+12,847 failed authenticated requests (40% error rate) over 18 minutes. All authenticated API functionality was degraded during OOMKill windows.
+
+## The Value
+
+**Without Bits**, the investigation would have started and likely stalled at Redis. The Redis cluster was healthy by every standard metric — an SRE could spend 20-30 minutes investigating Redis before realizing it wasn't the problem. Even after pivoting to the network layer, connecting the dots from sidecar OOMKills to a logging config change deployed 6 hours ago requires a specific mental model that's hard to construct during an active incident.
+
+**Bits skipped the Redis red herring entirely.** By analyzing the \`ECONNREFUSED\` address (loopback, not remote), it immediately pivoted to the sidecar, found the OOMKills, and traced back to the config change — delivering the full causal chain in 6 minutes.`,
   },
   {
     id: 'inv-003',
-    title: 'Failed Canary Deployment Caused Silent Data Corruption',
-    summary: 'A canary deployment passed health checks but introduced a serialization bug that corrupted 0.3% of order records. Bits identified the corruption pattern by cross-referencing log anomalies with the deploy timeline.',
+    title: 'Kafka Schema Mismatch Silently Breaks Entire Order Fulfillment Pipeline',
+    summary: 'A deployment changed Kafka message field names from snake_case to camelCase without updating the consumer. Every order failed deserialization. Bits correlated the 100% consumer error rate to the exact deploy diff and the specific field name mismatch.',
     category: 'Deployment Failure',
-    services: ['order-service', 'kafka-pipeline', 'dynamo-orders'],
+    services: ['order-service', 'fulfillment-consumer', 'kafka-orders-topic'],
     timeToResolution: '8 min',
     monitorType: 'Log',
-    tags: ['canary', 'data-corruption', 'serialization', 'kafka'],
+    tags: ['kafka', 'serialization', 'schema-mismatch', 'deployment'],
     featured: false,
-    writeup: `## The Alert
+    writeup: `## The Problem
 
-A log anomaly monitor detected a 15x spike in \`JSON parse error\` log lines from the \`kafka-pipeline\` consumer group processing order events.
+A log anomaly monitor fires on the \`fulfillment-consumer\`: error rate has jumped from 0% to 100%. Every single message from the \`orders.confirmed\` Kafka topic is failing. The consumer logs show \`KeyError: 'order_id'\` — but the \`order_id\` field has existed in the schema for years.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits traced the malformed messages back to the \`order-service\` canary that had been promoted to full traffic 2 hours earlier. The canary had passed all health checks, but a subtle serialization change was producing invalid payloads for a specific order type.
+The consumer hasn't been deployed recently — so the SRE's first instinct isn't to look at code changes. The error message (\`KeyError: 'order_id'\`) suggests the field is missing from the payload, which could indicate a producer bug, a schema registry issue, or data corruption. Investigating the producer side requires cross-team coordination. The actual cause — a field naming convention change in the producer — is subtle: the field exists, it's just called \`orderId\` now instead of \`order_id\`. Discovering this requires comparing the raw Kafka message payload with the consumer's deserialization code, which isn't a standard troubleshooting step during an incident.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **Log pattern analysis** — Bits grouped the parse errors and identified that 100% of failures involved orders with a \`gift_wrap\` field — a recently added optional field. The serialization produced \`"gift_wrap": undefined\` (invalid JSON) instead of omitting the field.
-2. **Deploy timeline correlation** — The error spike started exactly 14 minutes after canary promotion, matching the lag time for the Kafka consumer to process the backlog.
-3. **Blast radius assessment** — Bits queried DynamoDB metrics and estimated 847 order records were affected (0.3% of daily volume), providing a precise scope for the data remediation effort.
-4. **Health check gap** — Bits noted that the canary health checks only validated the \`/health\` endpoint and p99 latency — no payload validation was in the check suite.
+Bits was triggered by the log anomaly monitor and autonomously:
 
-## The Fix
+1. **Identified the error pattern**: 100% of messages failing with \`KeyError: 'order_id'\` at \`deserialize_order()\` line 47 in \`handlers/order_handler.py\`
+2. **Checked for recent deployments** across all services touching the \`orders.confirmed\` topic and found \`order-service\` v3.8.0 deployed at 14:22 UTC — the exact timestamp where the error rate stepped from 0% to 100%
+3. **Inspected the deploy diff** (commit \`a91bc3e\`): a global find-and-replace across all serializer classes converting snake_case to camelCase. PR description: "Part 2 of 3: API naming conventions"
+4. **Confirmed the mismatch**: post-deploy messages contain \`{"orderId": "..."}\` while the consumer reads \`payload['order_id']\`
+5. **Assessed the blast radius**: 8,491 messages queued in consumer lag, growing at ~370 messages/minute, no data loss (messages still in Kafka retention)
 
-The team rolled back to the previous version, published a corrected serialization fix, and ran a backfill job for the 847 affected orders using the raw Kafka messages (which were still in retention).
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-The canary "passed" — traditional deployment safety checks saw green. Bits caught the issue because it wasn't looking at deployment health checks; it was looking at **downstream effects across the entire pipeline**. The correlation of log anomalies → specific payload field → deploy timeline → blast radius gave the team everything they needed to act confidently and quickly.`,
+\`order-service\` v3.8.0 (commit \`a91bc3e\`) changed Kafka message serialization from snake_case to camelCase. The downstream \`fulfillment-consumer\` was not updated (it was "Part 3 of 3" in the migration plan, not yet deployed). Every message fails with \`KeyError: 'order_id'\` because the field is now \`orderId\`.
+
+### Evidence
+
+- Error rate step-function from 0% to 100% at exactly 14:22 UTC
+- Deploy of \`order-service\` v3.8.0 confirmed at 14:22 UTC via change tracking
+- Deploy diff shows global snake_case → camelCase rename across serializers
+- Consumer code at \`order_handler.py:47\` accesses \`payload['order_id']\` (snake_case)
+- 8,491 messages in consumer lag, no data loss
+
+### Impact Assessment
+
+All order fulfillment processing stopped for 23 minutes. 8,491 orders breached the 5-minute fulfillment SLA. No permanent data loss — messages were reprocessed after the consumer was patched.
+
+## The Value
+
+**Without Bits**, the SRE would have started investigating the consumer (which hadn't changed) and potentially the Kafka cluster itself. The \`KeyError\` suggests a missing field, not a renamed field — it's not obvious from the error alone that the field exists under a different name. Cross-referencing the producer's deployment, reading the diff, and understanding the naming convention migration typically takes 20-40 minutes, especially when the producer and consumer are owned by different teams.
+
+**Bits connected the consumer error to the producer deployment in minutes**, surfacing the exact diff, the field name mismatch, and the blast radius. The team was able to roll back the producer or hot-patch the consumer with full confidence in what had changed.`,
   },
   {
     id: 'inv-004',
-    title: 'Kubernetes Node Pressure Caused Intermittent Pod Evictions',
-    summary: 'Intermittent 503 errors were caused by pod evictions due to memory pressure on a subset of nodes. Bits correlated the eviction events with node-level metrics and identified an oversized DaemonSet as the root cause.',
+    title: 'DaemonSet Update Causes Intermittent Pod Evictions on Undersized Nodes',
+    summary: 'Intermittent 503s that auto-resolved every few minutes were dismissed as flapping. Bits correlated the error pattern with Kubernetes eviction events and traced them to a DaemonSet version bump that doubled memory usage — but only on specific node instance types.',
     category: 'Infrastructure',
-    services: ['k8s-cluster-prod', 'monitoring-daemonset', 'api-gateway'],
+    services: ['k8s-cluster-prod', 'datadog-agent-daemonset', 'api-gateway'],
     timeToResolution: '6 min',
-    monitorType: 'Infrastructure',
-    tags: ['kubernetes', 'pod-eviction', 'daemonset', 'memory-pressure', 'node-pressure'],
+    monitorType: 'Metric',
+    tags: ['kubernetes', 'pod-eviction', 'daemonset', 'memory-pressure'],
     featured: true,
-    writeup: `## The Alert
+    writeup: `## The Problem
 
-Intermittent \`503 Service Unavailable\` errors on the API gateway, firing and recovering every 10-15 minutes. Traditional monitors kept auto-resolving, making it look like transient noise.
+The API gateway error rate monitor fires and auto-resolves repeatedly: 503 errors spike for 10-15 seconds, then return to zero, then spike again. The pattern has been going on for hours, generating 23 alert notifications. The on-call has checked the API gateway pods — they look healthy. Load balancer metrics are normal. No recent deploys to the gateway itself.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits identified a pattern: the 503s correlated with **Kubernetes pod eviction events** on 3 specific nodes. The evictions were caused by memory pressure from an updated \`monitoring-daemonset\` that had doubled its memory footprint after a version bump.
+Intermittent issues that auto-resolve are often dismissed as "transient" or "network blips." The 503s only last 10-15 seconds at a time, making them nearly impossible to catch in real-time debugging. The actual cause — Kubernetes pod evictions from node memory pressure — doesn't show up in application-level metrics. The memory pressure itself comes from a DaemonSet updated 3 days ago, far outside the typical "what changed recently?" investigation window. And it only affects 3 of 17 nodes (the undersized ones), making the pattern inconsistent and harder to reproduce.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **Event correlation** — Bits linked the 503 windows to \`kubectl\` eviction events (\`Evicted\` reason) on nodes \`ip-10-0-4-17\`, \`ip-10-0-4-23\`, and \`ip-10-0-4-31\`. Each 503 window aligned exactly with an eviction → reschedule cycle.
-2. **Node memory breakdown** — On the affected nodes, the \`monitoring-daemonset\` was consuming 1.8 GB per pod (up from 900 MB before its v3.2 update 3 days prior). This left insufficient allocatable memory for application pods.
-3. **Why only 3 nodes** — Bits identified that these were the only nodes running the \`m5.large\` instance type (8 GB RAM). All \`m5.xlarge\` nodes (16 GB) had sufficient headroom.
-4. **DaemonSet change diff** — The version bump from v3.1 → v3.2 of the monitoring agent included a new in-memory cache feature enabled by default, accounting for the memory increase.
+Bits was triggered by the metric monitor and autonomously:
 
-## The Fix
+1. **Identified the intermittent pattern**: 503 errors correlating with specific 8-15 second windows, repeating every 5-10 minutes
+2. **Checked Kubernetes events** and found 23 pod eviction events on the same 3 nodes: \`ip-10-0-4-17\`, \`ip-10-0-4-23\`, \`ip-10-0-4-31\` — each eviction window aligned exactly with a 503 spike
+3. **Analyzed node characteristics**: all 3 nodes are \`m5.large\` (8 GiB RAM). The remaining 14 nodes are \`m5.xlarge\` (16 GiB) and show zero evictions
+4. **Calculated the memory breakdown** on affected nodes: the \`datadog-agent\` DaemonSet was consuming 1,780Mi per pod (up from 890Mi before the v7.54 update 3 days ago), leaving only 4,370Mi allocatable for apps — below the 4,480Mi of pod resource requests
+5. **Found the root cause**: the v7.54 changelog enabled an in-memory metrics aggregation buffer by default (\`DD_AGENT_METRICS_BUFFER_ENABLED=true\`), doubling per-pod memory
 
-The team set explicit memory limits on the DaemonSet and disabled the in-memory cache feature for the smaller nodes. Long-term, they migrated the \`m5.large\` nodes to \`m5.xlarge\`.
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-Intermittent issues that auto-resolve are notoriously hard to debug — they often get dismissed as "transient." Bits' persistence in correlating the timing pattern across Kubernetes events, node metrics, and the DaemonSet update history turned a frustrating intermittent problem into a clear, actionable diagnosis.`,
+\`datadog-agent\` DaemonSet v7.54 update (3 days prior) enabled \`DD_AGENT_METRICS_BUFFER_ENABLED=true\` by default, doubling memory from 890Mi to 1,780Mi. On \`m5.large\` nodes (8 GiB), this pushed total resource requests above allocatable memory, triggering kubelet eviction of application pods.
+
+### Evidence
+
+- 23 eviction events across 3 nodes (all \`m5.large\`)
+- Zero evictions on the 14 \`m5.xlarge\` nodes
+- DaemonSet memory: 1,780Mi (v7.54) vs 890Mi (v7.52)
+- Node memory math: 4,370Mi allocatable vs 4,480Mi requested = eviction
+- Each eviction → reschedule cycle: 8-15 seconds, matching 503 windows exactly
+
+### Impact Assessment
+
+1,847 requests returned 503 errors over 45 minutes across 23 eviction cycles, affecting an estimated 340 unique users. The repeated alert firing and auto-resolving generated significant on-call noise.
+
+## The Value
+
+**Without Bits**, this would likely have been an extended troubleshooting session. The 503s auto-resolved each time, so there was nothing to "catch" — by the time the SRE checks, everything looks fine. The API gateway pods are healthy. The DaemonSet change was 3 days old. The node-level memory math requires cross-referencing DaemonSet resource usage, node instance types, and kubelet eviction thresholds — a chain that's very hard to assemble manually during repeated 10-second error windows.
+
+**Bits turned 23 flapping alerts into one clear diagnosis**: DaemonSet memory increase + undersized nodes = eviction loop. The team disabled the buffer flag on affected nodes and the evictions stopped immediately.`,
   },
   {
     id: 'inv-005',
-    title: 'Slow Query Regression After PostgreSQL Index Was Silently Dropped',
-    summary: 'A 50x query time regression was caused by a missing index that was accidentally dropped during a migration. Bits identified the missing index by comparing query plans before and after the migration deployment.',
+    title: 'Silently Failed Migration Drops Critical Index on 12M-Row Table',
+    summary: 'A 50x latency regression appeared hours after a database migration that "succeeded." Bits traced the slow query to a missing index, then found the migration that dropped it — and the silent CREATE INDEX failure caused by a column name typo.',
     category: 'Database',
-    services: ['user-service', 'postgres-replica', 'search-api'],
+    services: ['user-service', 'postgres-primary', 'search-api'],
     timeToResolution: '4 min',
     monitorType: 'APM',
-    tags: ['postgresql', 'slow-query', 'index', 'migration', 'query-plan'],
+    tags: ['postgresql', 'slow-query', 'index', 'migration'],
     featured: false,
-    writeup: `## The Alert
+    writeup: `## The Problem
 
-The \`search-api\` p95 latency jumped from 120ms to 6.2s. The monitor escalated when the latency persisted beyond the 5-minute evaluation window.
+The search-api latency monitor fires: p95 has jumped from 120ms to 6.2 seconds. APM traces show the bottleneck is a single database query in the \`user-service\`. The query itself hasn't changed — it's been running for months. No recent code deployments to user-service. The database CPU and I/O metrics look normal.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits traced the slow responses to a single PostgreSQL query in \`user-service\` that had regressed from 8ms to 4.1s. The regression was caused by a **dropped index** — a migration script intended to rename an index instead dropped the old one and failed to create the replacement due to a syntax error that was silently swallowed.
+When a query suddenly gets slow but the code hasn't changed, SREs typically investigate the database: lock contention, vacuum issues, connection exhaustion, hardware problems. The actual cause — a missing index dropped by a migration — is hidden behind two layers of indirection: (1) the migration "succeeded" according to the pipeline because the runner was configured with \`on_error: continue\`, and (2) the DROP INDEX was intentional (part of a rename), so reviewing the migration script doesn't immediately raise alarm unless you notice the subsequent CREATE INDEX failed. The migration ran hours ago, further separating cause from effect.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **APM drill-down** — Bits isolated the slow span: \`SELECT * FROM users WHERE org_id = $1 AND status = $2\` — a query that hit the \`users\` table with 12M rows. Without the composite index, it was doing a sequential scan.
-2. **Migration timeline** — Bits identified that migration \`20260208_rename_user_indexes\` ran at 3:12 PM, and the latency regression started at 3:12 PM. The migration contained a \`DROP INDEX\` followed by a \`CREATE INDEX\` with a typo in the column name, which failed silently because the migration tool was configured with \`ON ERROR CONTINUE\`.
-3. **Query plan comparison** — Bits compared the current \`EXPLAIN ANALYZE\` output (Seq Scan, 4.1s) with the expected plan (Index Scan, 8ms), confirming the missing index as the root cause.
-4. **Blast radius** — 3 downstream services depended on this query path, all showing elevated latency.
+Bits was triggered by the APM latency monitor and autonomously:
 
-## The Fix
+1. **Isolated the slow span**: \`pg.query\` executing \`SELECT * FROM users WHERE organization_id = $1 AND status = $2\` on a 12.4M-row table — regression from 8ms to 4,100ms
+2. **Compared query execution plans**: current plan shows \`Seq Scan\` (sequential scan of all 12.4M rows) vs. expected \`Index Scan\` using \`idx_users_org_status\`
+3. **Searched for the missing index** and found that \`idx_users_org_status\` no longer exists in the database
+4. **Traced the index removal** to migration \`20260208_rename_user_indexes\` executed at 15:12 UTC — the exact timestamp where the latency regression began
+5. **Identified the silent failure**: the migration contained \`DROP INDEX idx_users_org_status\` (succeeded) followed by \`CREATE INDEX idx_users_org_id_status ON users (org_id, status)\` (failed — column is \`organization_id\`, not \`org_id\`). The migration runner logged the error but continued due to \`on_error: continue\`
 
-The team manually created the correct composite index (\`org_id, status\`). Query times returned to baseline within seconds of index creation.
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-The migration had "succeeded" according to the deployment pipeline — the syntax error was swallowed. Without Bits correlating the exact migration timestamp with the query plan regression, the team would have been investigating the database server itself (CPU, I/O, connections) rather than looking at a migration script from hours earlier. Bits turned a needle-in-a-haystack problem into a direct pointer to the failing migration line.`,
+Migration \`20260208_rename_user_indexes\` dropped \`idx_users_org_status\` but failed to create its replacement due to a column name typo (\`org_id\` vs. \`organization_id\`). The migration runner's \`on_error: continue\` setting swallowed the failure. The query fell back to sequential scan on 12.4M rows.
+
+### Evidence
+
+- Query regression: 8ms → 4,100ms (512x) on \`SELECT ... WHERE organization_id = $1 AND status = $2\`
+- \`EXPLAIN ANALYZE\` confirms: \`Seq Scan on users (cost=0.00..487231.00 rows=12400000)\`
+- Missing index: \`idx_users_org_status\` no longer exists
+- Migration log: \`ERROR: column "org_id" does not exist\` — \`1 of 2 statements succeeded (on_error: continue)\`
+- 3 downstream services impacted: search-api, admin-dashboard, user-sync
+
+### Impact Assessment
+
+search-api effectively unusable for ~35 minutes with p95 at 6.2 seconds (SLO: 500ms). Approximately 4,200 search requests affected across 3 downstream services.
+
+## The Value
+
+**Without Bits**, the SRE would have investigated the database server first: CPU, I/O, connections, lock contention, recent vacuum activity. These would all look normal. Eventually, running \`EXPLAIN ANALYZE\` would reveal the sequential scan, but connecting "missing index" to "a migration that succeeded hours ago with a typo in the CREATE statement" requires checking migration logs, reading the SQL, and spotting that \`org_id\` ≠ \`organization_id\`.
+
+**Bits delivered the full chain — slow query → missing index → failed migration → specific typo — in 4 minutes.** The fix was a one-line SQL command to create the correct index, and query times returned to baseline in seconds.`,
   },
   {
     id: 'inv-006',
-    title: 'DNS Resolution Failures Caused Intermittent Timeouts Across Services',
-    summary: 'Sporadic timeouts across multiple unrelated services were traced to CoreDNS pod resource limits being hit during a traffic spike. Bits correlated the timeout pattern across services and identified DNS as the common dependency.',
-    category: 'Networking',
+    title: 'CoreDNS CPU Throttling Makes Three Unrelated Service Failures Look Independent',
+    summary: 'Three different services failed with three different error messages in the same 30-second window. Bits identified they were all one incident: CoreDNS CPU throttling from a batch job spike was causing DNS resolution timeouts that manifested differently in each service.',
+    category: 'Infrastructure',
     services: ['coredns', 'auth-service', 'catalog-api', 'notification-service'],
     timeToResolution: '6 min',
-    monitorType: 'Infrastructure',
-    tags: ['dns', 'coredns', 'kubernetes', 'timeout', 'resource-limits'],
+    monitorType: 'Metric',
+    tags: ['dns', 'coredns', 'kubernetes', 'cpu-throttle'],
     featured: false,
-    writeup: `## The Alert
+    writeup: `## The Problem
 
-Multiple monitors fired simultaneously: \`auth-service\` connection timeouts, \`catalog-api\` upstream errors, and \`notification-service\` delivery failures. The alerts appeared unrelated — three different services, three different error types.
+Three monitors fire within 30 seconds of each other:
 
-## What Bits Found
+- \`auth-service\`: \`ETIMEDOUT\` connecting to the identity provider
+- \`catalog-api\`: \`502 Bad Gateway\` from the product database
+- \`notification-service\`: \`ECONNREFUSED\` on the email relay
 
-Bits identified the **common denominator**: all three services were failing on DNS resolution. CoreDNS pods were CPU-throttled, causing resolution timeouts that manifested as different error types in each service.
+Three different services, three different error types, three different upstream dependencies. This looks like three separate incidents. Three on-call engineers get paged.
 
-### Key Evidence Surfaced
+### Why This Is Hard
 
-1. **Cross-service correlation** — Bits noticed all three services started failing within the same 30-second window. Despite different error messages (\`ETIMEDOUT\`, \`502 Bad Gateway\`, \`connection refused\`), Bits identified that each failure occurred during the DNS resolution phase of the request lifecycle.
-2. **CoreDNS metrics** — CoreDNS pods were hitting their CPU limit (200m), causing request queuing. DNS resolution p99 jumped from 2ms to 8.3s. The \`coredns_dns_request_duration_seconds\` histogram showed a bimodal distribution: fast (cache hit) or very slow (queued).
-3. **Traffic spike trigger** — A batch job kicked off at the same time, generating 15k DNS queries/second (3x normal). The batch job was resolving external hostnames for a data enrichment pipeline.
-4. **Why now** — CoreDNS CPU limits had been set 8 months ago for a much smaller cluster. The cluster had since grown 3x, but the CoreDNS resource allocation was never updated.
+The natural response to simultaneous but apparently unrelated failures is to investigate each independently. Each team looks at their own service's upstream dependency and finds it healthy — the identity provider is fine, the product database is fine, the email relay is fine. The shared infrastructure layer causing the failure (DNS) is invisible in application-level diagnostics. DNS resolution happens in milliseconds normally, so it's never the first suspect. And the trigger — a batch job that increased DNS query volume 3x — is a completely unrelated workload that no team would think to check.
 
-## The Fix
+## What Bits Did
 
-Immediate: increased CoreDNS CPU limits from 200m to 1000m and added 2 additional replicas. Longer-term: implemented ndots optimization and added DNS caching at the application level for the batch job.
+Bits was triggered by the metric monitors and autonomously:
 
-## Why Bits Made the Difference
+1. **Correlated the timing**: all three services started failing within the same 30-second window — despite different error messages and different upstream dependencies, this simultaneity suggested a shared root cause
+2. **Analyzed APM traces** across all three services and found that 100% of failing requests had the failure occur during the DNS resolution phase of the outbound connection
+3. **Checked CoreDNS metrics**: CPU utilization at 200m/200m (100% of limit, throttled). DNS resolution p99 jumped from 2ms to 8,300ms. Bimodal latency: cache hits in <5ms, cache misses queuing behind throttled CPU
+4. **Identified the trigger**: the \`data-enrichment-hourly\` batch job started at 10:00 UTC, generating ~15,000 DNS queries/second (3x the normal cluster baseline)
+5. **Traced the underlying cause**: CoreDNS CPU limits were set 8 months ago at 200m for a much smaller cluster. The cluster had grown 3x since, but CoreDNS resources were never updated
 
-Three different teams would have investigated three different incidents independently. Bits' cross-service correlation identified that these were **one incident with three symptoms**, and the shared DNS dependency was the unifying explanation. This saved three parallel investigations and pointed directly to infrastructure-level remediation.`,
+## What Bits Delivered
+
+### Root Cause
+
+CoreDNS CPU limit of 200m (set 8 months ago) was insufficient for current cluster scale. A batch job generating 3x normal DNS query volume pushed CoreDNS to its limit, throttling all DNS resolution and causing connection timeouts in any service performing hostname lookups.
+
+### Evidence
+
+- Three services failing simultaneously with different error types — all at the DNS resolution phase
+- CoreDNS CPU at 200m/200m (100% throttled)
+- DNS p99: 8,300ms (baseline: 2ms)
+- Batch job \`data-enrichment-hourly\` generating 15,000 queries/sec (3x normal)
+- CoreDNS limits unchanged for 8 months despite 3x cluster growth
+
+### Impact Assessment
+
+4,291 failed requests across 3 services over ~12 minutes. Three separate teams paged for what was one incident.
+
+## The Value
+
+**Without Bits**, three teams would have investigated three incidents independently. Each team would have checked their own upstream dependency (healthy), checked their own service (healthy), and potentially escalated to the infrastructure team — a process that could easily take 30-45 minutes per team, with significant duplication.
+
+**Bits identified that three incidents were actually one** by correlating the simultaneous timing and tracing all three failures to the DNS resolution layer. Instead of three parallel 30-minute investigations, the infrastructure team got a single, clear diagnosis in 6 minutes: increase CoreDNS resources and add DNS caching for the batch job.`,
   },
   {
     id: 'inv-007',
-    title: 'Rate Limiter Misconfiguration Blocked Legitimate Traffic After Scaling Event',
-    summary: 'After an auto-scaling event added new pods, a rate limiter using per-pod counters caused legitimate requests to be rejected. Bits identified the rate limiter as the bottleneck by tracing 429 responses to the scaling event timeline.',
-    category: 'Incident Response',
-    services: ['api-gateway', 'rate-limiter', 'redis-cluster'],
+    title: 'Feature Flag Rollout Introduces N+1 Query Pattern Degrading Listings Page',
+    summary: 'A feature flag gradually rolled to 50% of users introduced a code path that replaced one batch SQL query with 48 individual queries. Bits identified the N+1 pattern by comparing trace flamegraphs between flagged and unflagged requests, pinpointing the exact function and line of code.',
+    category: 'Latency Degradation',
+    services: ['product-service', 'postgres-replica'],
     timeToResolution: '5 min',
     monitorType: 'APM',
-    tags: ['rate-limiting', 'auto-scaling', 'false-positive', '429-errors'],
-    featured: false,
-    writeup: `## The Alert
+    tags: ['n-plus-one', 'feature-flag', 'sql', 'latency'],
+    featured: true,
+    writeup: `## The Problem
 
-The \`api-gateway\` monitor detected a spike in 429 (Too Many Requests) responses — 23% of all requests were being rate-limited during a period of normal customer traffic.
+The APM latency monitor fires on \`product-service\`: p95 for \`GET /api/products\` has jumped from 120ms to 1,840ms. But the latency graph doesn't show a clean step-function — it shows a bimodal distribution. Some requests are fast (120ms), others are slow (1,840ms). No recent deployments. Database metrics look normal.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits traced the 429 spike to a **rate limiter misconfiguration** that was exposed by a Kubernetes auto-scaling event. The rate limiter was using per-pod in-memory counters instead of the shared Redis backend, meaning each new pod started with a fresh counter window while existing pods had accumulated counts.
+Bimodal latency distributions are confusing during triage. The SRE sees that "some requests are slow" but can't immediately tell why. The database isn't overloaded. The code hasn't changed recently. The feature flag that's causing the split was ramped hours ago and wasn't flagged as risky. Identifying an N+1 query pattern requires comparing individual trace flamegraphs between fast and slow requests, counting the database spans, and tracing back to the specific code path — a tedious manual process when you're trying to triage under pressure.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **Scaling event correlation** — An HPA event scaled the API gateway from 8 to 14 pods at 10:23 AM. The 429 rate jumped from 0.1% to 23% exactly 2 minutes later (the rate limiter window reset interval).
-2. **Per-pod breakdown** — Bits broke down 429 responses by pod. The original 8 pods were serving normally. The 6 new pods were rejecting traffic at 40%+ rates. This asymmetry immediately pointed to a per-pod state issue rather than a global rate limit being hit.
-3. **Configuration analysis** — The rate limiter was configured with \`strategy: local\` instead of \`strategy: redis\`. With \`local\`, each pod maintains its own counter. After scaling, the load balancer distributed traffic evenly, but the per-pod limits were set assuming the original pod count — each new pod's limit was too low for the traffic it received.
-4. **Customer impact** — Bits estimated 12,400 legitimate requests were rejected, primarily affecting the mobile app (which retried with backoff, causing a secondary traffic spike).
+Bits was triggered by the APM latency monitor and autonomously:
 
-## The Fix
+1. **Detected the bimodal pattern**: separated fast requests (~120ms) from slow requests (~1,840ms) and looked for the discriminating factor
+2. **Identified the feature flag**: 100% of slow requests had \`enhanced-product-cards: true\` in their span tags. 100% of fast requests had the flag disabled
+3. **Compared trace flamegraphs**: fast requests had 2 \`pg.query\` spans (1 listing + 1 batch enrichment). Slow requests had **49** \`pg.query\` spans (1 listing + 48 individual enrichment queries)
+4. **Pinpointed the code**: \`controllers/products.py\` line 89-92 — the feature flag code path calls \`enrich_product(product.id)\` in a loop instead of using the batch \`enrich_products()\` method
+5. **Assessed secondary risk**: database connection pool utilization at 78% (baseline: 22%) — trending toward exhaustion under sustained traffic
 
-Switched the rate limiter strategy from \`local\` to \`redis\` to use shared counters. Adjusted per-pod limits to account for dynamic scaling. Added a monitor for rate limiter rejection ratio by pod.
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-The initial instinct was to investigate whether the traffic spike itself was malicious (a DDoS or bot attack). Bits' per-pod breakdown immediately disproved this theory — the traffic was legitimate, and the asymmetry between old and new pods pointed directly to the scaling + rate limiter interaction. Without this breakdown, the team would have likely spent time analyzing traffic patterns instead of the rate limiter configuration.`,
+\`enhanced-product-cards\` feature flag activates a code path in \`ProductListingController.get_products()\` (\`controllers/products.py:89\`) that calls \`enrich_product()\` per item instead of \`enrich_products()\` in batch. This turns 1 batch query into 48 individual queries per request (N+1 pattern).
+
+### Evidence
+
+- Bimodal latency: 120ms (unflagged) vs. 1,840ms (flagged) — 15x difference
+- Flagged traces: 49 \`pg.query\` spans. Unflagged: 2 \`pg.query\` spans
+- Feature flag ramped to 50% at 09:00 UTC — latency increase correlates exactly
+- DB connection pool at 78% (baseline: 22%) — secondary cascading risk
+- Source: \`controllers/products.py\` line 92: \`product.enrichment = enrich_product(product.id)\`
+
+### Impact Assessment
+
+~14,000 product listing page loads affected over 35 minutes (50% of traffic). Database connection pool trending toward exhaustion, which would have impacted other services sharing the same database.
+
+## The Value
+
+**Without Bits**, the SRE would have seen a latency spike, checked the database (looks fine), checked recent deploys (none), and potentially spent 15-20 minutes before thinking to check feature flag state and compare individual traces. The N+1 pattern requires counting spans in a flamegraph — not something you do in the first 5 minutes of an incident.
+
+**Bits identified the bimodal split, traced it to the feature flag, and delivered the exact function and line number in 5 minutes.** The team paused the flag rollout immediately, then shipped a fix using the batch method before re-enabling.`,
   },
   {
     id: 'inv-008',
-    title: 'Certificate Expiry Caused Cascading Auth Failures Across Regions',
-    summary: 'An expired internal TLS certificate caused authentication failures that propagated across three regions. Bits identified the cert expiry by correlating mTLS handshake errors with the certificate metadata timeline.',
-    category: 'Networking',
-    services: ['auth-proxy', 'service-mesh', 'cert-manager'],
+    title: 'Expired mTLS Certificate Takes Down Auth Across All Three Regions',
+    summary: 'A 100% authentication failure across all regions looked catastrophic but had a simple root cause: an expired internal certificate. Bits cut through 50,000+ log lines to find the x509 error, then traced back to a cert-manager renewal failure caused by stale DNS credentials.',
+    category: 'Error Rate Spike',
+    services: ['auth-proxy', 'identity-provider', 'cert-manager'],
     timeToResolution: '3 min',
     monitorType: 'Log',
     tags: ['tls', 'certificate', 'mTLS', 'multi-region', 'auth-failure'],
-    featured: true,
-    writeup: `## The Alert
+    featured: false,
+    writeup: `## The Problem
 
-Critical alert: authentication success rate dropped to 0% across all three production regions simultaneously. Every authenticated API call was failing with \`401 Unauthorized\`.
+A log anomaly monitor fires: \`auth-proxy\` error rate has spiked to 100% across all three production regions simultaneously. Every authenticated API call returns \`401 Unauthorized\`. This is a full authentication outage.
 
-## What Bits Found
+### Why This Is Hard
 
-Bits identified that the root cause was an **expired internal mTLS certificate** used by the auth-proxy to communicate with the identity provider. The certificate had a 90-day rotation policy but the automated renewal had silently failed 3 days prior.
+During a multi-region authentication outage, the adrenaline is high and the investigation surface is massive. The SRE's instinct is to check: recent deploys (none), database connectivity (fine), identity provider health (healthy), network connectivity (normal). Certificate expiry — especially on internal certificates that auto-renew — is almost never the first hypothesis. The relevant error (\`x509: certificate has expired\`) is buried in verbose TLS debug logs among 50,000+ log entries. And the reason the auto-renewal failed (stale DNS credentials from a routine rotation 5 days ago) requires tracing through cert-manager logs that nobody is monitoring.
 
-### Key Evidence Surfaced
+## What Bits Did
 
-1. **Global correlation** — Bits immediately recognized the simultaneous failure across regions as a shared-dependency issue rather than a region-specific outage. The common link: all regions used the same internal CA for mTLS.
-2. **Log pattern extraction** — Auth-proxy logs contained \`x509: certificate has expired or is not yet valid\` errors, but these were buried in verbose TLS debug logs. Bits extracted and highlighted this specific error line from 50k+ log entries.
-3. **Certificate timeline** — Bits identified the cert was issued 90 days ago (\`Not After: 2026-03-15T00:00:00Z\`), and the cert-manager renewal job had failed 3 days prior with \`error: ACME challenge timeout\`. The failure was logged but not monitored.
-4. **Why auto-renewal failed** — The ACME challenge required DNS validation, but a recent DNS provider migration changed the API credentials. Cert-manager was still using the old credentials.
+Bits was triggered by the log anomaly monitor and autonomously:
 
-## The Fix
+1. **Recognized the multi-region pattern**: simultaneous failure across us-east-1, eu-west-1, and ap-southeast-1 → shared dependency, not region-specific
+2. **Analyzed auth-proxy logs** and extracted the critical error from 50,000+ entries: \`x509: certificate has expired or is not yet valid: current time 2026-03-15T00:00:12Z is after 2026-03-15T00:00:00Z\`
+3. **Inspected certificate metadata**: issued 2025-12-15, expires 2026-03-15 (90-day validity), issuer \`internal-ca.corp\`
+4. **Traced the renewal failure**: cert-manager logs from 3 days prior showed \`ACME challenge failed: dns01: DNS provider returned 403 Forbidden — invalid credentials\`
+5. **Identified the root cause**: DNS provider credentials were rotated on March 10 (routine security rotation), but the new credentials were not propagated to cert-manager configuration
 
-Manual certificate renewal using the updated DNS credentials. Follow-up: added monitoring for cert-manager renewal failures, set up alerts for certificates expiring within 14 days, and updated the DNS credentials in cert-manager config.
+## What Bits Delivered
 
-## Why Bits Made the Difference
+### Root Cause
 
-During a critical incident, the instinct is to check application code, database connectivity, and recent deploys. Certificate expiry — especially on internal certs — is rarely the first hypothesis. Bits' ability to parse TLS error logs, correlate the certificate's \`Not After\` timestamp, and trace back to the failed renewal job gave the team the full causal chain in minutes. The rapid resolution was possible only because Bits eliminated the "hypothesis cycling" that typically extends multi-region auth failures to 45+ minutes.`,
+Internal mTLS certificate expired at 00:00 UTC on March 15. Automated renewal via cert-manager had been failing for 3 days due to stale DNS provider credentials (rotated on March 10, not updated in cert-manager config). The \`403 Forbidden\` renewal failures were logged but not monitored.
+
+### Evidence
+
+- \`x509: certificate has expired\` errors across all 3 regions simultaneously
+- Certificate: issued 2025-12-15, expired 2026-03-15 (90-day validity)
+- cert-manager log: \`ACME challenge failed: dns01: 403 Forbidden — invalid credentials\` (since March 12)
+- DNS credentials rotated March 10, not propagated to cert-manager
+- 34,891 failed requests (401 Unauthorized) in the alert window
+
+### Impact Assessment
+
+Complete authentication outage across all three production regions. 34,891 API requests failed. All authenticated functionality unavailable for approximately 14 minutes.
+
+## The Value
+
+**Without Bits**, the SRE would cycle through the standard checklist: deploys, database, identity provider, network. None would show an issue. Searching through 50,000+ TLS debug log lines for the certificate error, then tracing back through cert-manager logs to find the renewal failure, then connecting that to the DNS credential rotation from 5 days ago — this chain typically takes 20-45 minutes to assemble manually during a high-pressure multi-region outage.
+
+**Bits cut through the log noise, identified the expired certificate, and delivered the full causal chain (DNS credential rotation → cert-manager failure → expired cert → auth outage) in 3 minutes.** The on-call renewed the certificate manually using the updated credentials and auth was restored.`,
   },
 ]
