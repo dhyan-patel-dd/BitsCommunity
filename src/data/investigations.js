@@ -40,7 +40,7 @@ export const categoryIcons = {
 export const investigations = [
   {
     id: 'inv-001',
-    title: 'Off-by-One Bug in Cart Pricing Crashes Checkout for Flagged Users',
+    title: 'Checkout Errors Spike 200x After a Clean Deploy',
     summary: 'A deploy introduced a subtle array bounds bug that only crashed when a specific feature flag was enabled. Bits traced 70,809 RUM errors to the exact line of code, the deploy that introduced it, and the feature flag that activated it — before the on-call had finished reading the alert.',
     category: 'Deployment Failure',
     services: ['shopist-web-ui', 'shopist-cart-service'],
@@ -91,7 +91,7 @@ Off-by-one bug at \`cart.vue:564\` — \`i <= items.length\` should be \`i < ite
   },
   {
     id: 'inv-002',
-    title: 'Envoy Sidecar OOMKills Create Intermittent Redis Failures Across Auth Fleet',
+    title: '40% Auth 5xx Spike Traced Past Redis to Sidecar OOMKills',
     summary: 'A 40% spike in 5xx errors on the auth-service looked like a Redis connectivity issue. Bits traced it through APM spans to Envoy sidecar OOMKill events caused by a logging config change deployed 6 hours earlier — a connection no human would make quickly under pressure.',
     category: 'Resource Exhaustion',
     services: ['auth-service', 'redis-session-store', 'envoy-sidecar'],
@@ -143,7 +143,7 @@ Envoy sidecar \`access_log_format: FULL\` config change increased per-connection
   },
   {
     id: 'inv-003',
-    title: 'Kafka Schema Mismatch Silently Breaks Entire Order Fulfillment Pipeline',
+    title: 'Kafka Consumer at 100% Error Rate From Upstream Schema Change',
     summary: 'A deployment changed Kafka message field names from snake_case to camelCase without updating the consumer. Every order failed deserialization. Bits correlated the 100% consumer error rate to the exact deploy diff and the specific field name mismatch.',
     category: 'Deployment Failure',
     services: ['order-service', 'fulfillment-consumer', 'kafka-orders-topic'],
@@ -195,7 +195,7 @@ All order fulfillment processing stopped for 23 minutes. 8,491 orders breached t
   },
   {
     id: 'inv-004',
-    title: 'DaemonSet Update Causes Intermittent Pod Evictions on Undersized Nodes',
+    title: 'Intermittent 503s From Pod Evictions on Undersized Nodes',
     summary: 'Intermittent 503s that auto-resolved every few minutes were dismissed as flapping. Bits correlated the error pattern with Kubernetes eviction events and traced them to a DaemonSet version bump that doubled memory usage — but only on specific node instance types.',
     category: 'Infrastructure',
     services: ['k8s-cluster-prod', 'datadog-agent-daemonset', 'api-gateway'],
@@ -247,7 +247,7 @@ Bits was triggered by the metric monitor and autonomously:
   },
   {
     id: 'inv-005',
-    title: 'Silently Failed Migration Drops Critical Index on 12M-Row Table',
+    title: '50x Query Regression From a Silently Dropped Index',
     summary: 'A 50x latency regression appeared hours after a database migration that "succeeded." Bits traced the slow query to a missing index, then found the migration that dropped it — and the silent CREATE INDEX failure caused by a column name typo.',
     category: 'Database',
     services: ['user-service', 'postgres-primary', 'search-api'],
@@ -299,7 +299,7 @@ search-api effectively unusable for ~35 minutes with p95 at 6.2 seconds (SLO: 50
   },
   {
     id: 'inv-006',
-    title: 'CoreDNS CPU Throttling Makes Three Unrelated Service Failures Look Independent',
+    title: 'Three Services Down From CoreDNS CPU Throttling',
     summary: 'Three different services failed with three different error messages in the same 30-second window. Bits identified they were all one incident: CoreDNS CPU throttling from a batch job spike was causing DNS resolution timeouts that manifested differently in each service.',
     category: 'Infrastructure',
     services: ['coredns', 'auth-service', 'catalog-api', 'notification-service'],
@@ -357,7 +357,7 @@ CoreDNS CPU limit of 200m (set 8 months ago) was insufficient for current cluste
   },
   {
     id: 'inv-007',
-    title: 'Feature Flag Rollout Introduces N+1 Query Pattern Degrading Listings Page',
+    title: 'N+1 Query Hidden Behind a Feature Flag Rollout',
     summary: 'A feature flag gradually rolled to 50% of users introduced a code path that replaced one batch SQL query with 48 individual queries. Bits identified the N+1 pattern by comparing trace flamegraphs between flagged and unflagged requests, pinpointing the exact function and line of code.',
     category: 'Latency Degradation',
     services: ['product-service', 'postgres-replica'],
@@ -409,7 +409,7 @@ Bits was triggered by the APM latency monitor and autonomously:
   },
   {
     id: 'inv-008',
-    title: 'Expired mTLS Certificate Takes Down Auth Across All Three Regions',
+    title: 'Global Auth Outage From Expired mTLS Certificate',
     summary: 'A 100% authentication failure across all regions looked catastrophic but had a simple root cause: an expired internal certificate. Bits cut through 50,000+ log lines to find the x509 error, then traced back to a cert-manager renewal failure caused by stale DNS credentials.',
     category: 'Error Rate Spike',
     services: ['auth-proxy', 'identity-provider', 'cert-manager'],
