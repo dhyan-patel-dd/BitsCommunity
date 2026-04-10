@@ -192,7 +192,6 @@ export default function Home({ navigate }) {
                   onClick={() => navigate({ page: 'investigation', investigationId: inv.id })}
                   className="group text-left rounded-xl border border-white/[0.07] bg-[#18162A] hover:border-[#774AA4]/40 hover:bg-[#1F1C33] transition-all duration-200 overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(10,8,18,0.8)]"
                 >
-                  <div className="h-0.5 bg-gradient-to-r from-[#774AA4] to-[#E879F9] opacity-50 group-hover:opacity-100 transition-opacity" />
                   <div className="p-4">
                     <div className="mb-2.5">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium ${colors.bg} ${colors.text} ${colors.border} border`}>
@@ -316,8 +315,6 @@ function FeaturedCardLarge({ template, navigate }) {
       onClick={() => navigate({ page: 'detail', templateId: template.id })}
       className="group lg:col-span-3 text-left rounded-xl border border-white/[0.07] bg-[#18162A] hover:border-[#774AA4]/40 transition-all duration-200 overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(10,8,18,0.8),0_2px_8px_rgba(119,74,164,0.2)]"
     >
-      <div className="h-0.5 bg-gradient-to-r from-[#774AA4] via-[#A855F7] to-[#E879F9] opacity-70 group-hover:opacity-100 transition-opacity" />
-
       <div className="p-6">
         <div className="flex items-start gap-4 mb-4">
           <div className="w-11 h-11 rounded-xl bg-[#774AA4]/25 flex items-center justify-center text-2xl border border-[#774AA4]/30 flex-shrink-0">
@@ -357,7 +354,6 @@ function FeaturedCardSmall({ template, navigate }) {
       onClick={() => navigate({ page: 'detail', templateId: template.id })}
       className="group text-left rounded-xl border border-white/[0.07] bg-[#18162A] hover:border-[#774AA4]/40 transition-all duration-200 overflow-hidden hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(10,8,18,0.8)]"
     >
-      <div className="h-0.5 bg-gradient-to-r from-[#774AA4] to-[#9B6DC5] opacity-50 group-hover:opacity-100 transition-opacity" />
       <div className="p-4 flex items-start gap-3">
         <div className="w-8 h-8 rounded-lg bg-[#774AA4]/20 flex items-center justify-center text-base flex-shrink-0">
           {icon}
