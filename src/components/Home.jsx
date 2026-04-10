@@ -55,7 +55,7 @@ export default function Home({ navigate }) {
           </h1>
 
           <p className="text-lg sm:text-xl text-[#A0A0B8] mb-10 max-w-xl mx-auto leading-relaxed">
-            Learn from the best teams. Configure Bits like a pro.
+            The best Bits configurations, templates, and investigations — all in one place.
           </p>
 
           {/* Search bar */}
@@ -99,10 +99,10 @@ export default function Home({ navigate }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-center gap-8 sm:gap-12 flex-wrap">
             {[
-              { value: '247', label: 'templates' },
-              { value: '89', label: 'contributors' },
-              { value: '43', label: 'organizations' },
-              { value: '12k+', label: 'uses this month' },
+              { value: String(templates.length), label: 'templates' },
+              { value: '6', label: 'content types' },
+              { value: String(investigations.length), label: 'investigations' },
+              { value: String(templates.filter(t => t.verified).length), label: 'verified' },
             ].map(stat => (
               <div key={stat.label} className="flex items-center gap-2">
                 <span className="text-white font-bold text-base tabular-nums">{stat.value}</span>
@@ -245,14 +245,14 @@ export default function Home({ navigate }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="text-[#65637A] text-sm">
-              Bits Community — Community hub for{' '}
+              Bits Community — Templates & best practices for{' '}
               <a href="https://docs.datadoghq.com/bits_ai/" className="text-[#9B6DC5] hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">
                 Datadog Bits AI SRE
               </a>
             </span>
           </div>
           <div className="text-[#65637A] text-xs">
-            Community POC · Not an official Datadog product
+            Built by the Bits AI SRE team at Datadog
           </div>
         </div>
       </footer>
